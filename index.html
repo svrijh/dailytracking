@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Training Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1B1E24; --surface:#242932; --surface-alt:#2C323C; --line:#3A4150;
+    --text:#EDEFF2; --text-muted:#8B93A1; --amber:#E8A23D;
+    --z1:#6B7280; --z2:#4C8BC9; --z3:#4C9A6A; --z4:#E8A23D; --z5:#C8383A; --done:#4C9A6A;
+    --deficit:#4C9A6A; --surplus:#C8383A;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px 16px 60px;}
+  .wrap{max-width:640px;margin:0 auto;}
+  .topbar{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:22px;flex-wrap:wrap;gap:12px;}
+  .title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:30px;letter-spacing:0.5px;text-transform:uppercase;}
+  .stats{display:flex;gap:18px;align-items:center;}
+  .stat{text-align:right;}
+  .stat-label{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);}
+  .stat-value{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600;}
+  .ftp-row{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  .ftp-row input{width:56px;background:var(--surface-alt);border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:14px;border-radius:5px;padding:3px 6px;text-align:center;}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 16px;margin-bottom:16px;}
+  .card-title{font-family:'Barlow Condensed',sans-serif;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:12px;}
+  svg.profile{width:100%;height:110px;display:block;}
+  .day-labels{display:flex;justify-content:space-between;margin-top:4px;}
+  .day-labels span{flex:1;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);}
+  .day-labels span.today{color:var(--amber);font-weight:600;}
+  .today-card{position:relative;overflow:hidden;}
+  .today-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--zone-color,var(--amber));}
+  .today-date{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;}
+  .today-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:26px;text-transform:uppercase;margin-bottom:6px;}
+  .today-detail{font-size:14px;color:var(--text-muted);line-height:1.5;margin-bottom:6px;}
+  .zone-tag{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;padding:2px 8px;border-radius:20px;margin-right:6px;color:#15171B;font-weight:600;}
+  .kcal-tag{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);margin-bottom:10px;}
+  .btn-done{width:100%;padding:12px;border:none;border-radius:8px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;letter-spacing:0.5px;text-transform:uppercase;background:var(--surface-alt);color:var(--text);border:1px solid var(--line);transition:background 0.15s,color 0.15s;}
+  .btn-done.done{background:var(--done);color:#0F1512;border-color:var(--done);}
+  .office-toggle{display:flex;align-items:center;gap:10px;margin-bottom:14px;font-size:13px;color:var(--text-muted);}
+  .office-toggle button{background:var(--surface-alt);border:1px solid var(--line);color:var(--text);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;font-family:'IBM Plex Mono',monospace;}
+  .office-toggle button.active{background:var(--amber);color:#15171B;border-color:var(--amber);}
+  .swap-row{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 4px;}
+  .chip{background:var(--surface-alt);border:1px solid var(--line);color:var(--text-muted);font-size:12px;padding:6px 10px;border-radius:20px;cursor:pointer;font-family:'IBM Plex Mono',monospace;}
+  .chip:hover{color:var(--text);border-color:var(--amber);}
+  .chip.reset{color:var(--amber);border-color:var(--amber);}
+  .swap-form{background:var(--surface-alt);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:10px;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);}
+  .field input{width:70px;background:var(--surface);border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:13px;border-radius:5px;padding:5px 7px;text-align:center;}
+  .swap-form button.confirm{background:var(--amber);color:#15171B;border:none;border-radius:6px;padding:8px 14px;font-weight:600;cursor:pointer;font-family:'Barlow Condensed',sans-serif;text-transform:uppercase;font-size:13px;}
+  .week-list-title{font-family:'Barlow Condensed',sans-serif;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);margin:22px 0 10px;}
+  .day-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px;}
+  .day-row.is-today{border-color:var(--amber);}
+  .day-row .dow{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-muted);width:34px;flex-shrink:0;}
+  .day-row .info{flex:1;min-width:0;}
+  .day-row .name{font-weight:600;font-size:14px;}
+  .day-row .sub{font-size:12px;color:var(--text-muted);margin-top:2px;}
+  .check{width:26px;height:26px;border-radius:7px;border:1.5px solid var(--line);flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--done);font-size:15px;background:var(--surface-alt);}
+  .check.checked{background:var(--done);border-color:var(--done);color:#0F1512;}
+  .retest-banner{margin-top:2px;padding:12px 14px;border-radius:10px;background:var(--surface-alt);border:1px dashed var(--line);font-size:12.5px;color:var(--text-muted);}
+  .retest-banner b{color:var(--text);}
+  .fuel-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+  .fuel-item label{display:block;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:5px;}
+  .fuel-item .row{display:flex;align-items:center;gap:6px;}
+  .fuel-item input{width:100%;background:var(--surface-alt);border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:15px;border-radius:6px;padding:7px 8px;}
+  .fuel-readout{font-family:'IBM Plex Mono',monospace;font-size:15px;padding:7px 0;}
+  .net-banner{margin-top:4px;padding:12px 14px;border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:14px;text-align:center;font-weight:600;}
+  .net-banner.deficit{background:rgba(76,154,106,0.15);color:var(--deficit);border:1px solid rgba(76,154,106,0.4);}
+  .net-banner.surplus{background:rgba(200,56,58,0.15);color:var(--surplus);border:1px solid rgba(200,56,58,0.4);}
+  .weight-row{display:flex;gap:8px;align-items:flex-end;margin-top:16px;}
+  .weight-row .field input{width:80px;}
+  .weight-row button{background:var(--surface-alt);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:8px 12px;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:12px;}
+  .weight-trend{margin-top:12px;font-size:12.5px;color:var(--text-muted);}
+  .weight-trend b{color:var(--text);}
+  svg.wchart{width:100%;height:50px;margin-top:8px;display:block;}
+  .history-stats{display:flex;gap:22px;margin-bottom:14px;}
+  .history-stats .stat2{text-align:left;}
+  .history-stats .stat2 .stat-label{margin-bottom:3px;}
+  .history-stats .stat2 .stat-value{font-size:18px;}
+  svg.hchart{width:100%;height:90px;display:block;}
+  .hchart-labels{display:flex;justify-content:space-between;margin-top:4px;}
+  .hchart-labels span{flex:1;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-muted);}
+  .footnote{margin-top:22px;font-size:11.5px;color:var(--text-muted);line-height:1.6;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="title">Training Log</div>
+    <div class="stats">
+      <div class="stat"><div class="stat-label">Streak</div><div class="stat-value" id="streakVal">0</div></div>
+      <div class="ftp-row">FTP <input type="number" id="ftpInput" value="220"> W</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">This week</div>
+    <svg class="profile" viewBox="0 0 700 110" id="profileSvg"></svg>
+    <div class="day-labels" id="dayLabels"></div>
+  </div>
+
+  <div class="card today-card" id="todayCard">
+    <div class="today-date" id="todayDate"></div>
+    <div class="today-name" id="todayName"></div>
+    <div id="officeToggleSlot"></div>
+    <div class="today-detail" id="todayDetail"></div>
+    <div class="kcal-tag" id="todayKcal"></div>
+    <button class="btn-done" id="btnDone"></button>
+    <div class="swap-row" id="swapRow"></div>
+    <div id="swapFormSlot"></div>
+  </div>
+
+  <div class="week-list-title">Rest of week</div>
+  <div id="weekList"></div>
+  <div class="retest-banner" id="retestBanner"></div>
+
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">Fuel &amp; weight</div>
+    <div class="fuel-grid">
+      <div class="fuel-item">
+        <label>Baseline burn (non-training, kcal/day)</label>
+        <input type="number" id="baselineInput" step="10">
+      </div>
+      <div class="fuel-item">
+        <label>Est. burn today (baseline + session)</label>
+        <div class="fuel-readout" id="totalBurnReadout">—</div>
+      </div>
+      <div class="fuel-item">
+        <label>Calories eaten today</label>
+        <input type="number" id="eatenInput" step="10" placeholder="e.g. 2100">
+      </div>
+      <div class="fuel-item">
+        <label>Net today</label>
+        <div class="fuel-readout" id="netReadout">—</div>
+      </div>
+    </div>
+    <div class="net-banner" id="netBanner"></div>
+
+    <div class="weight-row">
+      <div class="field"><label>Weight (kg)</label><input type="number" id="weightInput" step="0.1"></div>
+      <button id="logWeightBtn">Log weight</button>
+      <div class="weight-trend" id="weightTrend" style="flex:1;"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">History</div>
+    <div class="history-stats">
+      <div class="stat2"><div class="stat-label">Avg hrs/wk (last 8)</div><div class="stat-value" id="avgHoursStat">—</div></div>
+      <div class="stat2"><div class="stat-label">This week so far</div><div class="stat-value" id="weekHoursStat">—</div></div>
+    </div>
+    <div class="card-title" style="margin-top:4px;">Training hours per week</div>
+    <svg class="hchart" viewBox="0 0 700 90" id="hoursChart"></svg>
+    <div class="hchart-labels" id="hoursChartLabels"></div>
+    <div class="card-title" style="margin-top:18px;">Weight over time</div>
+    <svg class="wchart" viewBox="0 0 700 50" id="weightChart"></svg>
+  </div>
+
+  <div class="footnote">
+    Zones are % of FTP: Z1 &lt;55% &middot; Z2 56–75% &middot; Z3 76–90% &middot; Z4 91–105% &middot; Z5 106–120%.
+    Calorie burn is a rough estimate (cycling: watts &times; hours &times; 3.6; other activities: MET &times; weight &times; hours) — useful for trend, not lab-grade.
+    Update FTP after a retest and weight after logging, and every target recalculates.
+    Marking a day done snapshots what you actually did (including swaps), so History stays accurate even if you change FTP or weight later.
+  </div>
+
+</div>
+
+<script>
+const PEDELEC_DATE = new Date(2026,7,3);
+const START_DATE = new Date(2026,6,15);
+const METS = {walk:3.5, swim:7, gym:5, rest:1.2, spin:6};
+
+function fmtDate(d){ return d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}); }
+function dateKey(d){ return d.toISOString().slice(0,10); }
+function startOfWeek(d){ const day=d.getDay(); const diff=(day===0?-6:1-day); const s=new Date(d); s.setDate(d.getDate()+diff); s.setHours(0,0,0,0); return s; }
+function weekNumberSince(d){ return Math.floor((startOfWeek(d)-startOfWeek(START_DATE))/86400000/7); }
+function bikeKcal(watts,hours){ return Math.round(watts*hours*3.6); }
+function metKcal(met,weightKg,hours){ return Math.round(met*weightKg*hours); }
+function zoneFromPct(pct){
+  if(pct<0.55) return 'Z1';
+  if(pct<0.76) return 'Z2';
+  if(pct<0.91) return 'Z3';
+  if(pct<1.06) return 'Z4';
+  return 'Z5';
+}
+
+let settings = { ftp:220, weight:78, baselineBurn:2200, tueOffice:{} };
+let logs = {};
+let overrides = {};
+let calorieLog = {};
+let weights = [];
+let pendingSwap = null;
+
+async function loadData(){
+  try{ const s=await window.storage.get('settings'); if(s&&s.value) settings=Object.assign({ftp:220,weight:78,baselineBurn:2200,tueOffice:{}}, JSON.parse(s.value)); }catch(e){}
+  try{ const l=await window.storage.get('logs'); if(l&&l.value) logs=JSON.parse(l.value); }catch(e){}
+  try{ const o=await window.storage.get('overrides'); if(o&&o.value) overrides=JSON.parse(o.value); }catch(e){}
+  try{ const c=await window.storage.get('calorieLog'); if(c&&c.value) calorieLog=JSON.parse(c.value); }catch(e){}
+  try{ const w=await window.storage.get('weights'); if(w&&w.value) weights=JSON.parse(w.value); }catch(e){}
+  document.getElementById('ftpInput').value = settings.ftp;
+  document.getElementById('baselineInput').value = settings.baselineBurn;
+  document.getElementById('weightInput').value = settings.weight;
+  render();
+}
+async function saveSettings(){ try{ await window.storage.set('settings', JSON.stringify(settings)); }catch(e){console.error(e);} }
+async function saveLogs(){ try{ await window.storage.set('logs', JSON.stringify(logs)); }catch(e){console.error(e);} }
+async function saveOverrides(){ try{ await window.storage.set('overrides', JSON.stringify(overrides)); }catch(e){console.error(e);} }
+async function saveCalorieLog(){ try{ await window.storage.set('calorieLog', JSON.stringify(calorieLog)); }catch(e){console.error(e);} }
+async function saveWeights(){ try{ await window.storage.set('weights', JSON.stringify(weights)); }catch(e){console.error(e);} }
+
+function zoneWatts(pct1,pct2,ftp){ return Math.round(ftp*pct1)+'-'+Math.round(ftp*pct2)+'W'; }
+
+function planFor(d){
+  const ftp = settings.ftp, w = settings.weight, dow = d.getDay();
+  const prePedelec = d < PEDELEC_DATE;
+  const wk = weekNumberSince(d);
+  const tueZ4 = (wk % 2 === 0);
+
+  if(prePedelec){
+    switch(dow){
+      case 1: return {name:'Intervals — Threshold', zone:'Z4', detail:'2 x 15 min @ '+zoneWatts(0.91,1.05,ftp)+', 5 min easy between reps.', kcal:bikeKcal(ftp*0.98,0.6), hours:0.6};
+      case 2: return {name:'Swim technique', zone:'Z2', detail:'30–40 min. Short reps (25m), lots of rest, focus on form over distance.', kcal:metKcal(METS.swim,w,0.55), hours:0.55};
+      case 3: return {name:'Rest / walk', zone:'Z1', detail:'Easy walk 30–40 min, or full rest.', kcal:metKcal(METS.walk,w,0.5), hours:0.5};
+      case 4: return {name:'Intervals — VO2max', zone:'Z5', detail:'5 x 4 min @ '+zoneWatts(1.06,1.20,ftp)+', 4 min easy between reps.', kcal:bikeKcal(ftp*1.13,0.65), hours:0.65};
+      case 5: return {name:'Gym — main lifts', zone:'Z3', detail:'Squat/deadlift (alternate focus weekly), bench, pull-up, overhead press, light core.', kcal:metKcal(METS.gym,w,1), hours:1};
+      case 6: return {name:'Long ride', zone:'Z2', detail:'2–3 hrs, Z2–Z3, climbing-focused where possible.', kcal:bikeKcal(ftp*0.65,2.5), hours:2.5};
+      case 0: return {name:'Swim or walk', zone:'Z1', detail:'2nd swim session if doing 2x/week, otherwise an easy walk or spin.', kcal:metKcal(METS.swim,w,0.5), hours:0.5};
+    }
+  } else {
+    switch(dow){
+      case 1: return {name:'Commute — AM + PM', zone:'Z1', detail:'34km each way, ~1hr, ~90W target. ~2hrs total easy volume.', kcal:bikeKcal(90,2), hours:2};
+      case 2: {
+        const officeKey = dateKey(startOfWeek(d));
+        const inOffice = settings.tueOffice[officeKey];
+        if(inOffice) return {name:'Commute — AM + PM', zone:'Z1', detail:'Office day: 34km each way, ~1hr, ~90W target.', kcal:bikeKcal(90,2), hours:2, officeToggle:true, officeKey};
+        if(tueZ4) return {name:'Intervals — Threshold', zone:'Z4', detail:'2 x 15-20 min @ '+zoneWatts(0.91,1.05,ftp)+', 5 min easy between. (Not in office.)', kcal:bikeKcal(ftp*0.98,0.65), hours:0.65, officeToggle:true, officeKey};
+        return {name:'Intervals — VO2max', zone:'Z5', detail:'5-6 x 4 min @ '+zoneWatts(1.06,1.20,ftp)+', 4 min easy between. (Not in office.)', kcal:bikeKcal(ftp*1.13,0.7), hours:0.7, officeToggle:true, officeKey};
+      }
+      case 3: return {name:'Swim technique', zone:'Z2', detail:'30–40 min technique-focused swim.', kcal:metKcal(METS.swim,w,0.55), hours:0.55};
+      case 4: return {name:'Commute — AM + PM', zone:'Z1', detail:'34km each way, ~1hr, ~90W target. ~2hrs total easy volume.', kcal:bikeKcal(90,2), hours:2};
+      case 5: return {name:'Gym — main lifts', zone:'Z3', detail:'Squat/deadlift (alternate focus weekly), bench, pull-up, overhead press, light core.', kcal:metKcal(METS.gym,w,1), hours:1};
+      case 6: return {name:'Long ride', zone:'Z2', detail:'2–3 hrs, Z2–Z3, climbing-focused.', kcal:bikeKcal(ftp*0.65,2.5), hours:2.5};
+      case 0: return {name:'Swim (2nd) or easy spin', zone:'Z1', detail:'2nd swim session if going 2x/week, otherwise an easy walk or spin.', kcal:metKcal(METS.swim,w,0.5), hours:0.5};
+    }
+  }
+}
+function getSession(d){
+  const k = dateKey(d);
+  if(overrides[k]) return overrides[k];
+  return planFor(d);
+}
+async function toggleLog(d){
+  const k = dateKey(d);
+  if(logs[k]){
+    delete logs[k];
+  } else {
+    const s = getSession(d);
+    logs[k] = {done:true, name:s.name, zone:s.zone, hours:s.hours||0, kcal:s.kcal||0};
+  }
+  await saveLogs();
+}
+
+const zoneHex = {Z1:'#6B7280',Z2:'#4C8BC9',Z3:'#4C9A6A',Z4:'#E8A23D',Z5:'#C8383A'};
+const zoneHeight = {Z1:0.22,Z2:0.55,Z3:0.65,Z4:0.85,Z5:1.0};
+
+function computeWeekDates(today){
+  const mon = startOfWeek(today); const arr=[];
+  for(let i=0;i<7;i++){ const d=new Date(mon); d.setDate(mon.getDate()+i); arr.push(d); }
+  return arr;
+}
+
+const SWAP_OPTIONS = [
+  {type:'bike', label:'🚴 Bike ride'},
+  {type:'swim', label:'🏊 Swim'},
+  {type:'gym', label:'🏋 Gym'},
+  {type:'walk', label:'🚶 Walk / rest'},
+];
+
+function renderSwapUI(now){
+  const swapRow = document.getElementById('swapRow');
+  swapRow.innerHTML = '';
+  SWAP_OPTIONS.forEach(opt=>{
+    const chip = document.createElement('div');
+    chip.className='chip'; chip.textContent = opt.label;
+    chip.addEventListener('click', ()=>{ pendingSwap = opt.type; render(); });
+    swapRow.appendChild(chip);
+  });
+  const resetChip = document.createElement('div');
+  resetChip.className='chip reset'; resetChip.textContent='↺ Reset to plan';
+  resetChip.addEventListener('click', async ()=>{
+    delete overrides[dateKey(now)];
+    pendingSwap = null;
+    await saveOverrides();
+    render();
+  });
+  swapRow.appendChild(resetChip);
+
+  const slot = document.getElementById('swapFormSlot');
+  slot.innerHTML = '';
+  if(!pendingSwap) return;
+  const form = document.createElement('div');
+  form.className = 'swap-form';
+  if(pendingSwap==='bike'){
+    form.innerHTML = '<div class="field"><label>Hours</label><input type="number" id="sw_hours" step="0.25" value="1.5"></div>'+
+      '<div class="field"><label>Avg watts</label><input type="number" id="sw_watts" step="5" value="'+Math.round(settings.ftp*0.7)+'"></div>'+
+      '<button class="confirm">Set as today</button>';
+  } else {
+    const defaults = {swim:0.6, gym:1, walk:0.5};
+    form.innerHTML = '<div class="field"><label>Hours</label><input type="number" id="sw_hours" step="0.25" value="'+defaults[pendingSwap]+'"></div>'+
+      '<button class="confirm">Set as today</button>';
+  }
+  form.querySelector('.confirm').addEventListener('click', async ()=>{
+    const hours = parseFloat(document.getElementById('sw_hours').value)||0.5;
+    let session;
+    if(pendingSwap==='bike'){
+      const watts = parseFloat(document.getElementById('sw_watts').value)||150;
+      const pct = watts/settings.ftp;
+      session = {name:'Bike ride (swapped in)', zone:zoneFromPct(pct), detail: hours.toFixed(2)+'hr @ ~'+watts+'W (swapped in for today).', kcal:bikeKcal(watts,hours), hours:hours};
+    } else {
+      const labelMap = {swim:'Swim (swapped in)', gym:'Gym (swapped in)', walk:'Walk / rest (swapped in)'};
+      const zoneMap = {swim:'Z2', gym:'Z3', walk:'Z1'};
+      const met = METS[pendingSwap];
+      session = {name:labelMap[pendingSwap], zone:zoneMap[pendingSwap], detail: hours.toFixed(2)+'hr, swapped in for today.', kcal:metKcal(met,settings.weight,hours), hours:hours};
+    }
+    overrides[dateKey(now)] = session;
+    pendingSwap = null;
+    await saveOverrides();
+    render();
+  });
+  slot.appendChild(form);
+}
+
+function render(){
+  const now = new Date(); now.setHours(0,0,0,0);
+  const weekDates = computeWeekDates(now);
+  const dowShort = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  const svg = document.getElementById('profileSvg');
+  const W=700,H=110, seg=W/7;
+  const points = weekDates.map((d,i)=>{ const s=getSession(d); const h=zoneHeight[s.zone]*80+10; return {x:i*seg+seg/2, y:H-h, s, d}; });
+  let area = 'M 0,'+H+' '; points.forEach(p=>{ area += 'L '+p.x+','+p.y+' '; }); area += 'L '+W+','+H+' Z';
+  let svgContent = '<path d="'+area+'" fill="#3A4150" opacity="0.5"/>';
+  points.forEach(p=>{
+    const done = !!logs[dateKey(p.d)];
+    const isToday = dateKey(p.d)===dateKey(now);
+    const color = done ? '#4C9A6A' : zoneHex[p.s.zone];
+    svgContent += '<circle cx="'+p.x+'" cy="'+p.y+'" r="'+(isToday?7:5)+'" fill="'+color+'" stroke="'+(isToday?'#EDEFF2':'none')+'" stroke-width="2"/>';
+  });
+  svg.innerHTML = svgContent;
+
+  const labels = document.getElementById('dayLabels'); labels.innerHTML='';
+  weekDates.forEach(d=>{ const span=document.createElement('span'); span.textContent=dowShort[d.getDay()]; if(dateKey(d)===dateKey(now)) span.classList.add('today'); labels.appendChild(span); });
+
+  const todaySession = getSession(now);
+  document.getElementById('todayDate').textContent = fmtDate(now).toUpperCase();
+  document.getElementById('todayName').textContent = todaySession.name;
+  document.getElementById('todayDetail').innerHTML = '<span class="zone-tag" style="background:'+zoneHex[todaySession.zone]+'">'+todaySession.zone+'</span>' + todaySession.detail;
+  document.getElementById('todayKcal').textContent = '~'+todaySession.kcal+' kcal estimated for this session';
+  document.getElementById('todayCard').style.setProperty('--zone-color', zoneHex[todaySession.zone]);
+
+  const officeSlot = document.getElementById('officeToggleSlot'); officeSlot.innerHTML='';
+  if(todaySession.officeToggle){
+    const div = document.createElement('div'); div.className='office-toggle';
+    const inOffice = !!settings.tueOffice[todaySession.officeKey];
+    div.innerHTML = 'In the office today? <button data-val="1" class="'+(inOffice?'active':'')+'">Yes</button><button data-val="0" class="'+(!inOffice?'active':'')+'">No</button>';
+    div.querySelectorAll('button').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{ settings.tueOffice[todaySession.officeKey]=btn.dataset.val==='1'; await saveSettings(); render(); });
+    });
+    officeSlot.appendChild(div);
+  }
+
+  const key = dateKey(now);
+  const doneToday = !!logs[key];
+  const btn = document.getElementById('btnDone');
+  btn.textContent = doneToday ? 'Done ✓' : 'Mark today done';
+  btn.className = 'btn-done'+(doneToday?' done':'');
+  btn.onclick = async ()=>{ await toggleLog(now); render(); };
+
+  renderSwapUI(now);
+
+  let streak=0; let cursor=new Date(now);
+  while(logs[dateKey(cursor)]){ streak++; cursor.setDate(cursor.getDate()-1); }
+  document.getElementById('streakVal').textContent = streak;
+
+  const list = document.getElementById('weekList'); list.innerHTML='';
+  weekDates.forEach(d=>{
+    if(dateKey(d)===key) return;
+    const s = getSession(d);
+    const row = document.createElement('div'); row.className='day-row';
+    const dchecked = !!logs[dateKey(d)];
+    row.innerHTML = '<div class="dow">'+dowShort[d.getDay()]+'</div><div class="info"><div class="name">'+s.name+'</div><div class="sub">'+s.zone+' &middot; '+s.detail.split('.')[0]+'</div></div><div class="check'+(dchecked?' checked':'')+'">'+(dchecked?'✓':'')+'</div>';
+    row.querySelector('.check').addEventListener('click', async ()=>{ await toggleLog(d); render(); });
+    list.appendChild(row);
+  });
+
+  const weeksSinceRetest = weekNumberSince(now) % 5; const weeksLeft = (5-weeksSinceRetest)%5;
+  document.getElementById('retestBanner').innerHTML = weeksLeft===0
+    ? '<b>Retest week.</b> Run a 20-min or ramp FTP test and update FTP above.'
+    : 'Next FTP retest in <b>~'+weeksLeft+' week'+(weeksLeft===1?'':'s')+'</b>. Targets based on FTP = <b>'+settings.ftp+'W</b>.';
+
+  const totalBurn = settings.baselineBurn + todaySession.kcal;
+  document.getElementById('totalBurnReadout').textContent = totalBurn + ' kcal';
+  const eaten = (calorieLog[key] && calorieLog[key].eaten) || null;
+  document.getElementById('eatenInput').value = eaten !== null ? eaten : '';
+  if(eaten !== null){
+    const net = eaten - totalBurn;
+    document.getElementById('netReadout').textContent = (net>0?'+':'')+net+' kcal';
+    const banner = document.getElementById('netBanner');
+    banner.className = 'net-banner ' + (net<=0?'deficit':'surplus');
+    banner.textContent = net<=0 ? ('Deficit of ~'+Math.abs(net)+' kcal today') : ('Surplus of ~'+net+' kcal today');
+  } else {
+    document.getElementById('netReadout').textContent = '—';
+    document.getElementById('netBanner').className = 'net-banner';
+    document.getElementById('netBanner').style.background='transparent';
+    document.getElementById('netBanner').style.border='1px dashed var(--line)';
+    document.getElementById('netBanner').style.color='var(--text-muted)';
+    document.getElementById('netBanner').textContent = 'Log calories eaten to see today\u2019s balance.';
+  }
+
+  renderWeightChart();
+  renderHoursHistory(now);
+}
+
+function renderHoursHistory(now){
+  const numWeeks = 8;
+  const weekStarts = [];
+  for(let i=numWeeks-1;i>=0;i--){
+    const ws = startOfWeek(now);
+    ws.setDate(ws.getDate()-7*i);
+    weekStarts.push(ws);
+  }
+  const totals = weekStarts.map(ws=>{
+    let sum = 0;
+    for(let i=0;i<7;i++){
+      const d = new Date(ws); d.setDate(ws.getDate()+i);
+      const entry = logs[dateKey(d)];
+      if(entry && entry.hours) sum += entry.hours;
+    }
+    return sum;
+  });
+  const W=700,H=90;
+  const barW = W/numWeeks*0.6;
+  const gap = W/numWeeks;
+  const maxVal = Math.max(...totals, 1);
+  let svgContent = '';
+  totals.forEach((t,i)=>{
+    const h = (t/maxVal)*70;
+    const x = i*gap + (gap-barW)/2;
+    const y = H-h-16;
+    const isCurrent = i===numWeeks-1;
+    svgContent += '<rect x="'+x+'" y="'+y+'" width="'+barW+'" height="'+h+'" rx="3" fill="'+(isCurrent?'#E8A23D':'#4C8BC9')+'" opacity="'+(isCurrent?1:0.7)+'"/>';
+    svgContent += '<text x="'+(x+barW/2)+'" y="'+(y-5)+'" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#8B93A1">'+t.toFixed(1)+'</text>';
+  });
+  document.getElementById('hoursChart').innerHTML = svgContent;
+
+  const labels = document.getElementById('hoursChartLabels');
+  labels.innerHTML = '';
+  weekStarts.forEach((ws,i)=>{
+    const span = document.createElement('span');
+    span.textContent = ws.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    labels.appendChild(span);
+  });
+
+  const avg = totals.slice(0,-1).length ? (totals.slice(0,-1).reduce((a,b)=>a+b,0)/Math.max(totals.slice(0,-1).filter((_,i)=>true).length,1)) : 0;
+  const completedWeeks = totals.slice(0, numWeeks-1);
+  const avgDisplay = completedWeeks.length ? (completedWeeks.reduce((a,b)=>a+b,0)/completedWeeks.length) : 0;
+  document.getElementById('avgHoursStat').textContent = avgDisplay.toFixed(1)+'h';
+  document.getElementById('weekHoursStat').textContent = totals[totals.length-1].toFixed(1)+'h';
+}
+
+function renderWeightChart(){
+  const trend = document.getElementById('weightTrend');
+  const svg = document.getElementById('weightChart');
+  if(weights.length===0){ trend.innerHTML='No weight logged yet.'; svg.innerHTML=''; return; }
+  const sorted = weights.slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const latest = sorted[sorted.length-1];
+  let compareStr = '';
+  const target = new Date(latest.date); target.setDate(target.getDate()-14);
+  let ref = null;
+  for(const w of sorted){ if(new Date(w.date) <= target) ref = w; }
+  if(ref){
+    const diff = (latest.kg - ref.kg).toFixed(1);
+    compareStr = ' &middot; <b>'+(diff>0?'+':'')+diff+'kg</b> vs 14 days ago';
+  }
+  trend.innerHTML = 'Latest: <b>'+latest.kg+'kg</b> ('+latest.date+')'+compareStr;
+
+  const W=700,H=50;
+  const vals = sorted.map(w=>w.kg);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = (max-min)||1;
+  const pts = sorted.map((w,i)=>{
+    const x = sorted.length===1 ? W/2 : (i/(sorted.length-1))*W;
+    const y = H - ((w.kg-min)/range)*40 - 5;
+    return x+','+y;
+  }).join(' ');
+  svg.innerHTML = '<polyline points="'+pts+'" fill="none" stroke="#E8A23D" stroke-width="2"/>';
+}
+
+document.getElementById('ftpInput').addEventListener('change', async (e)=>{
+  const v = parseInt(e.target.value,10);
+  if(!isNaN(v) && v>0){ settings.ftp=v; await saveSettings(); render(); }
+});
+document.getElementById('baselineInput').addEventListener('change', async (e)=>{
+  const v = parseInt(e.target.value,10);
+  if(!isNaN(v) && v>0){ settings.baselineBurn=v; await saveSettings(); render(); }
+});
+document.getElementById('eatenInput').addEventListener('change', async (e)=>{
+  const v = parseInt(e.target.value,10);
+  const key = dateKey(new Date(new Date().setHours(0,0,0,0)));
+  calorieLog[key] = { eaten: isNaN(v)?null:v };
+  await saveCalorieLog(); render();
+});
+document.getElementById('logWeightBtn').addEventListener('click', async ()=>{
+  const v = parseFloat(document.getElementById('weightInput').value);
+  if(isNaN(v)||v<=0) return;
+  settings.weight = v;
+  const today = dateKey(new Date(new Date().setHours(0,0,0,0)));
+  const existingIdx = weights.findIndex(w=>w.date===today);
+  if(existingIdx>=0) weights[existingIdx].kg = v; else weights.push({date:today, kg:v});
+  await saveSettings(); await saveWeights(); render();
+});
+
+loadData();
+</script>
+</body>
+</html>
