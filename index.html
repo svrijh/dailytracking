@@ -33,6 +33,10 @@
   .today-card{position:relative;overflow:hidden;}
   .today-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--zone-color,var(--amber));}
   .today-date{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;}
+  .day-nav{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .day-nav button.arrow{background:var(--surface-alt);border:1px solid var(--line);color:var(--text);width:30px;height:30px;border-radius:7px;cursor:pointer;font-size:15px;}
+  .day-nav input[type=date]{background:var(--surface-alt);border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:13px;border-radius:7px;padding:6px 8px;}
+  .day-nav .today-jump{background:var(--amber);color:#15171B;border:none;border-radius:7px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:0.5px;}
   .today-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:26px;text-transform:uppercase;margin-bottom:6px;}
   .today-detail{font-size:14px;color:var(--text-muted);line-height:1.5;margin-bottom:6px;}
   .zone-tag{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;padding:2px 8px;border-radius:20px;margin-right:6px;color:#15171B;font-weight:600;}
@@ -104,6 +108,7 @@
   </div>
 
   <div class="card today-card" id="todayCard">
+    <div class="day-nav" id="dayNav"></div>
     <div class="today-date" id="todayDate"></div>
     <div class="today-name" id="todayName"></div>
     <div id="officeToggleSlot"></div>
@@ -114,7 +119,7 @@
     <div id="swapFormSlot"></div>
   </div>
 
-  <div class="week-list-title">Rest of week</div>
+  <div class="week-list-title" id="weekListTitle">Rest of week</div>
   <div id="weekList"></div>
   <div class="retest-banner" id="retestBanner"></div>
 
@@ -280,7 +285,7 @@ const SWAP_OPTIONS = [
   {type:'walk', label:'🚶 Walk / rest'},
 ];
 
-function renderSwapUI(now){
+function renderSwapUI(selectedDate){
   const swapRow = document.getElementById('swapRow');
   swapRow.innerHTML = '';
   SWAP_OPTIONS.forEach(opt=>{
@@ -292,7 +297,7 @@ function renderSwapUI(now){
   const resetChip = document.createElement('div');
   resetChip.className='chip reset'; resetChip.textContent='↺ Reset to plan';
   resetChip.addEventListener('click', async ()=>{
-    delete overrides[dateKey(now)];
+    delete overrides[dateKey(selectedDate)];
     pendingSwap = null;
     await saveOverrides();
     render();
@@ -307,11 +312,11 @@ function renderSwapUI(now){
   if(pendingSwap==='bike'){
     form.innerHTML = '<div class="field"><label>Hours</label><input type="number" id="sw_hours" step="0.25" value="1.5"></div>'+
       '<div class="field"><label>Avg watts</label><input type="number" id="sw_watts" step="5" value="'+Math.round(settings.ftp*0.7)+'"></div>'+
-      '<button class="confirm">Set as today</button>';
+      '<button class="confirm">Set this day</button>';
   } else {
     const defaults = {swim:0.6, gym:1, walk:0.5};
     form.innerHTML = '<div class="field"><label>Hours</label><input type="number" id="sw_hours" step="0.25" value="'+defaults[pendingSwap]+'"></div>'+
-      '<button class="confirm">Set as today</button>';
+      '<button class="confirm">Set this day</button>';
   }
   form.querySelector('.confirm').addEventListener('click', async ()=>{
     const hours = parseFloat(document.getElementById('sw_hours').value)||0.5;
@@ -319,14 +324,14 @@ function renderSwapUI(now){
     if(pendingSwap==='bike'){
       const watts = parseFloat(document.getElementById('sw_watts').value)||150;
       const pct = watts/settings.ftp;
-      session = {name:'Bike ride (swapped in)', zone:zoneFromPct(pct), detail: hours.toFixed(2)+'hr @ ~'+watts+'W (swapped in for today).', kcal:bikeKcal(watts,hours), hours:hours};
+      session = {name:'Bike ride (swapped in)', zone:zoneFromPct(pct), detail: hours.toFixed(2)+'hr @ ~'+watts+'W (swapped in).', kcal:bikeKcal(watts,hours), hours:hours};
     } else {
       const labelMap = {swim:'Swim (swapped in)', gym:'Gym (swapped in)', walk:'Walk / rest (swapped in)'};
       const zoneMap = {swim:'Z2', gym:'Z3', walk:'Z1'};
       const met = METS[pendingSwap];
-      session = {name:labelMap[pendingSwap], zone:zoneMap[pendingSwap], detail: hours.toFixed(2)+'hr, swapped in for today.', kcal:metKcal(met,settings.weight,hours), hours:hours};
+      session = {name:labelMap[pendingSwap], zone:zoneMap[pendingSwap], detail: hours.toFixed(2)+'hr, swapped in.', kcal:metKcal(met,settings.weight,hours), hours:hours};
     }
-    overrides[dateKey(now)] = session;
+    overrides[dateKey(selectedDate)] = session;
     pendingSwap = null;
     await saveOverrides();
     render();
@@ -334,10 +339,14 @@ function renderSwapUI(now){
   slot.appendChild(form);
 }
 
+let selectedDate = null;
+
 function render(){
   const now = new Date(); now.setHours(0,0,0,0);
-  const weekDates = computeWeekDates(now);
+  if(!selectedDate) selectedDate = new Date(now);
+  const weekDates = computeWeekDates(selectedDate);
   const dowShort = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const isToday = dateKey(selectedDate)===dateKey(now);
 
   const svg = document.getElementById('profileSvg');
   const W=700,H=110, seg=W/7;
@@ -346,54 +355,77 @@ function render(){
   let svgContent = '<path d="'+area+'" fill="#3A4150" opacity="0.5"/>';
   points.forEach(p=>{
     const done = !!logs[dateKey(p.d)];
-    const isToday = dateKey(p.d)===dateKey(now);
-    const color = done ? '#4C9A6A' : zoneHex[p.s.zone];
-    svgContent += '<circle cx="'+p.x+'" cy="'+p.y+'" r="'+(isToday?7:5)+'" fill="'+color+'" stroke="'+(isToday?'#EDEFF2':'none')+'" stroke-width="2"/>';
+    const isActualToday = dateKey(p.d)===dateKey(now);
+    const isSel = dateKey(p.d)===dateKey(selectedDate);
+    const color = done ? '#4C9A6A' : (isActualToday && !done ? '#E8A23D' : zoneHex[p.s.zone]);
+    svgContent += '<circle cx="'+p.x+'" cy="'+p.y+'" r="'+(isSel?7:5)+'" fill="'+color+'" stroke="'+(isSel?'#EDEFF2':'none')+'" stroke-width="2"/>';
   });
   svg.innerHTML = svgContent;
 
   const labels = document.getElementById('dayLabels'); labels.innerHTML='';
-  weekDates.forEach(d=>{ const span=document.createElement('span'); span.textContent=dowShort[d.getDay()]; if(dateKey(d)===dateKey(now)) span.classList.add('today'); labels.appendChild(span); });
+  weekDates.forEach(d=>{
+    const span=document.createElement('span'); span.textContent=dowShort[d.getDay()];
+    if(dateKey(d)===dateKey(selectedDate)) span.classList.add('today');
+    span.style.cursor='pointer';
+    span.addEventListener('click', ()=>{ selectedDate = new Date(d); render(); });
+    labels.appendChild(span);
+  });
 
-  const todaySession = getSession(now);
-  document.getElementById('todayDate').textContent = fmtDate(now).toUpperCase();
-  document.getElementById('todayName').textContent = todaySession.name;
-  document.getElementById('todayDetail').innerHTML = '<span class="zone-tag" style="background:'+zoneHex[todaySession.zone]+'">'+todaySession.zone+'</span>' + todaySession.detail;
-  document.getElementById('todayKcal').textContent = '~'+todaySession.kcal+' kcal estimated for this session';
-  document.getElementById('todayCard').style.setProperty('--zone-color', zoneHex[todaySession.zone]);
+  // Day navigator
+  const nav = document.getElementById('dayNav');
+  nav.innerHTML = '<button class="arrow" id="navPrev">‹</button>'+
+    '<input type="date" id="navDate" value="'+dateKey(selectedDate)+'">'+
+    '<button class="arrow" id="navNext">›</button>'+
+    (isToday ? '' : '<button class="today-jump" id="navToday">Today</button>');
+  document.getElementById('navPrev').addEventListener('click', ()=>{ const d=new Date(selectedDate); d.setDate(d.getDate()-1); selectedDate=d; render(); });
+  document.getElementById('navNext').addEventListener('click', ()=>{ const d=new Date(selectedDate); d.setDate(d.getDate()+1); selectedDate=d; render(); });
+  document.getElementById('navDate').addEventListener('change', (e)=>{ const parts=e.target.value.split('-'); selectedDate=new Date(parts[0],parts[1]-1,parts[2]); render(); });
+  const navTodayBtn = document.getElementById('navToday');
+  if(navTodayBtn) navTodayBtn.addEventListener('click', ()=>{ selectedDate=new Date(now); render(); });
+
+  const session = getSession(selectedDate);
+  document.getElementById('todayDate').textContent = fmtDate(selectedDate).toUpperCase() + (isToday ? ' · TODAY' : '');
+  document.getElementById('todayName').textContent = session.name;
+  document.getElementById('todayDetail').innerHTML = '<span class="zone-tag" style="background:'+zoneHex[session.zone]+'">'+session.zone+'</span>' + session.detail;
+  document.getElementById('todayKcal').textContent = '~'+session.kcal+' kcal estimated for this session';
+  document.getElementById('todayCard').style.setProperty('--zone-color', zoneHex[session.zone]);
 
   const officeSlot = document.getElementById('officeToggleSlot'); officeSlot.innerHTML='';
-  if(todaySession.officeToggle){
+  if(session.officeToggle){
     const div = document.createElement('div'); div.className='office-toggle';
-    const inOffice = !!settings.tueOffice[todaySession.officeKey];
-    div.innerHTML = 'In the office today? <button data-val="1" class="'+(inOffice?'active':'')+'">Yes</button><button data-val="0" class="'+(!inOffice?'active':'')+'">No</button>';
+    const inOffice = !!settings.tueOffice[session.officeKey];
+    div.innerHTML = 'In the office that day? <button data-val="1" class="'+(inOffice?'active':'')+'">Yes</button><button data-val="0" class="'+(!inOffice?'active':'')+'">No</button>';
     div.querySelectorAll('button').forEach(btn=>{
-      btn.addEventListener('click', async ()=>{ settings.tueOffice[todaySession.officeKey]=btn.dataset.val==='1'; await saveSettings(); render(); });
+      btn.addEventListener('click', async ()=>{ settings.tueOffice[session.officeKey]=btn.dataset.val==='1'; await saveSettings(); render(); });
     });
     officeSlot.appendChild(div);
   }
 
-  const key = dateKey(now);
-  const doneToday = !!logs[key];
+  const key = dateKey(selectedDate);
+  const doneSel = !!logs[key];
   const btn = document.getElementById('btnDone');
-  btn.textContent = doneToday ? 'Done ✓' : 'Mark today done';
-  btn.className = 'btn-done'+(doneToday?' done':'');
-  btn.onclick = async ()=>{ await toggleLog(now); render(); };
+  btn.textContent = doneSel ? 'Done ✓' : (isToday ? 'Mark today done' : 'Mark this day done');
+  btn.className = 'btn-done'+(doneSel?' done':'');
+  btn.onclick = async ()=>{ await toggleLog(selectedDate); render(); };
 
-  renderSwapUI(now);
+  renderSwapUI(selectedDate);
 
   let streak=0; let cursor=new Date(now);
   while(logs[dateKey(cursor)]){ streak++; cursor.setDate(cursor.getDate()-1); }
   document.getElementById('streakVal').textContent = streak;
 
+  document.getElementById('weekListTitle').textContent = isToday ? 'Rest of week' : 'Week of '+fmtDate(weekDates[0]);
   const list = document.getElementById('weekList'); list.innerHTML='';
   weekDates.forEach(d=>{
     if(dateKey(d)===key) return;
     const s = getSession(d);
     const row = document.createElement('div'); row.className='day-row';
+    if(dateKey(d)===dateKey(now)) row.classList.add('is-today');
     const dchecked = !!logs[dateKey(d)];
     row.innerHTML = '<div class="dow">'+dowShort[d.getDay()]+'</div><div class="info"><div class="name">'+s.name+'</div><div class="sub">'+s.zone+' &middot; '+s.detail.split('.')[0]+'</div></div><div class="check'+(dchecked?' checked':'')+'">'+(dchecked?'✓':'')+'</div>';
-    row.querySelector('.check').addEventListener('click', async ()=>{ await toggleLog(d); render(); });
+    row.querySelector('.check').addEventListener('click', async (e)=>{ e.stopPropagation(); await toggleLog(d); render(); });
+    row.querySelector('.info').addEventListener('click', ()=>{ selectedDate = new Date(d); render(); });
+    row.querySelector('.info').style.cursor='pointer';
     list.appendChild(row);
   });
 
@@ -402,27 +434,31 @@ function render(){
     ? '<b>Retest week.</b> Run a 20-min or ramp FTP test and update FTP above.'
     : 'Next FTP retest in <b>~'+weeksLeft+' week'+(weeksLeft===1?'':'s')+'</b>. Targets based on FTP = <b>'+settings.ftp+'W</b>.';
 
-  const totalBurn = settings.baselineBurn + todaySession.kcal;
+  const totalBurn = settings.baselineBurn + session.kcal;
   document.getElementById('totalBurnReadout').textContent = totalBurn + ' kcal';
   const eaten = (calorieLog[key] && calorieLog[key].eaten) || null;
   document.getElementById('eatenInput').value = eaten !== null ? eaten : '';
+  const dayWord = isToday ? 'today' : fmtDate(selectedDate);
   if(eaten !== null){
     const net = eaten - totalBurn;
     document.getElementById('netReadout').textContent = (net>0?'+':'')+net+' kcal';
     const banner = document.getElementById('netBanner');
     banner.className = 'net-banner ' + (net<=0?'deficit':'surplus');
-    banner.textContent = net<=0 ? ('Deficit of ~'+Math.abs(net)+' kcal today') : ('Surplus of ~'+net+' kcal today');
+    banner.textContent = net<=0 ? ('Deficit of ~'+Math.abs(net)+' kcal on '+dayWord) : ('Surplus of ~'+net+' kcal on '+dayWord);
   } else {
     document.getElementById('netReadout').textContent = '—';
     document.getElementById('netBanner').className = 'net-banner';
     document.getElementById('netBanner').style.background='transparent';
     document.getElementById('netBanner').style.border='1px dashed var(--line)';
     document.getElementById('netBanner').style.color='var(--text-muted)';
-    document.getElementById('netBanner').textContent = 'Log calories eaten to see today\u2019s balance.';
+    document.getElementById('netBanner').textContent = 'Log calories eaten on '+dayWord+' to see the balance.';
   }
 
   renderWeightChart();
   renderHoursHistory(now);
+
+  const existingWeight = weights.find(w=>w.date===key);
+  document.getElementById('weightInput').value = existingWeight ? existingWeight.kg : settings.weight;
 }
 
 function renderHoursHistory(now){
@@ -510,7 +546,7 @@ document.getElementById('baselineInput').addEventListener('change', async (e)=>{
 });
 document.getElementById('eatenInput').addEventListener('change', async (e)=>{
   const v = parseInt(e.target.value,10);
-  const key = dateKey(new Date(new Date().setHours(0,0,0,0)));
+  const key = dateKey(selectedDate || new Date(new Date().setHours(0,0,0,0)));
   calorieLog[key] = { eaten: isNaN(v)?null:v };
   await saveCalorieLog(); render();
 });
@@ -518,9 +554,9 @@ document.getElementById('logWeightBtn').addEventListener('click', async ()=>{
   const v = parseFloat(document.getElementById('weightInput').value);
   if(isNaN(v)||v<=0) return;
   settings.weight = v;
-  const today = dateKey(new Date(new Date().setHours(0,0,0,0)));
-  const existingIdx = weights.findIndex(w=>w.date===today);
-  if(existingIdx>=0) weights[existingIdx].kg = v; else weights.push({date:today, kg:v});
+  const dkey = dateKey(selectedDate || new Date(new Date().setHours(0,0,0,0)));
+  const existingIdx = weights.findIndex(w=>w.date===dkey);
+  if(existingIdx>=0) weights[existingIdx].kg = v; else weights.push({date:dkey, kg:v});
   await saveSettings(); await saveWeights(); render();
 });
 
