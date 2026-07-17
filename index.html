@@ -196,21 +196,21 @@ let weights = [];
 let pendingSwap = null;
 
 async function loadData(){
-  try{ const s=await window.storage.get('settings'); if(s&&s.value) settings=Object.assign({ftp:220,weight:78,baselineBurn:2200,tueOffice:{}}, JSON.parse(s.value)); }catch(e){}
-  try{ const l=await window.storage.get('logs'); if(l&&l.value) logs=JSON.parse(l.value); }catch(e){}
-  try{ const o=await window.storage.get('overrides'); if(o&&o.value) overrides=JSON.parse(o.value); }catch(e){}
-  try{ const c=await window.storage.get('calorieLog'); if(c&&c.value) calorieLog=JSON.parse(c.value); }catch(e){}
-  try{ const w=await window.storage.get('weights'); if(w&&w.value) weights=JSON.parse(w.value); }catch(e){}
+  try{ const s=localStorage.getItem('settings'); if(s) settings=Object.assign({ftp:220,weight:78,baselineBurn:2200,tueOffice:{}}, JSON.parse(s)); }catch(e){}
+  try{ const l=localStorage.getItem('logs'); if(l) logs=JSON.parse(l); }catch(e){}
+  try{ const o=localStorage.getItem('overrides'); if(o) overrides=JSON.parse(o); }catch(e){}
+  try{ const c=localStorage.getItem('calorieLog'); if(c) calorieLog=JSON.parse(c); }catch(e){}
+  try{ const w=localStorage.getItem('weights'); if(w) weights=JSON.parse(w); }catch(e){}
   document.getElementById('ftpInput').value = settings.ftp;
   document.getElementById('baselineInput').value = settings.baselineBurn;
   document.getElementById('weightInput').value = settings.weight;
   render();
 }
-async function saveSettings(){ try{ await window.storage.set('settings', JSON.stringify(settings)); }catch(e){console.error(e);} }
-async function saveLogs(){ try{ await window.storage.set('logs', JSON.stringify(logs)); }catch(e){console.error(e);} }
-async function saveOverrides(){ try{ await window.storage.set('overrides', JSON.stringify(overrides)); }catch(e){console.error(e);} }
-async function saveCalorieLog(){ try{ await window.storage.set('calorieLog', JSON.stringify(calorieLog)); }catch(e){console.error(e);} }
-async function saveWeights(){ try{ await window.storage.set('weights', JSON.stringify(weights)); }catch(e){console.error(e);} }
+async function saveSettings(){ try{ localStorage.setItem('settings', JSON.stringify(settings)); }catch(e){console.error(e);} }
+async function saveLogs(){ try{ localStorage.setItem('logs', JSON.stringify(logs)); }catch(e){console.error(e);} }
+async function saveOverrides(){ try{ localStorage.setItem('overrides', JSON.stringify(overrides)); }catch(e){console.error(e);} }
+async function saveCalorieLog(){ try{ localStorage.setItem('calorieLog', JSON.stringify(calorieLog)); }catch(e){console.error(e);} }
+async function saveWeights(){ try{ localStorage.setItem('weights', JSON.stringify(weights)); }catch(e){console.error(e);} }
 
 function zoneWatts(pct1,pct2,ftp){ return Math.round(ftp*pct1)+'-'+Math.round(ftp*pct2)+'W'; }
 
