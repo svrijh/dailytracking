@@ -56,6 +56,8 @@
 
   .metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
   .metrics-grid .field{margin-bottom:0;}
+  .num-input:disabled{opacity:0.45;cursor:not-allowed;background:var(--surface);}
+  .btn.locked{background:var(--surface-alt);color:var(--green);border:1px solid rgba(76,154,106,0.4);}
 
   .chart-card svg{width:100%;height:130px;display:block;}
   .chart-labels{display:flex;justify-content:space-between;margin-top:4px;}
@@ -104,6 +106,7 @@
         <div class="field"><label>Sleep duration (hrs)</label><input type="number" class="num-input" id="m_sleepdur" step="0.1"></div>
         <div class="field"><label>Weight (kg)</label><input type="number" class="num-input" id="m_weight" step="0.1"></div>
       </div>
+      <button class="btn" id="dayLockBtn" style="margin-top:16px;"></button>
     </div>
   </div>
 
@@ -121,6 +124,10 @@
 
     <div class="card chart-card">
       <div class="card-title">Weight (kg)</div>
+      <div class="legend">
+        <span><i style="background:var(--amber);"></i>Weight</span>
+        <span><i style="background:var(--text-muted);"></i>Target (-0.1kg/day)</span>
+      </div>
       <div class="stat-mini" id="weightStat"></div>
       <svg viewBox="0 0 700 130" id="weightChart"></svg>
       <div class="chart-labels" id="weightChartLabels"></div>
@@ -154,7 +161,12 @@ const BIKE_SUBTYPES = [
 ];
 const TYPE_LABELS = {bike:'Bike', swim:'Swim', run:'Run', gym:'Gym', walk:'Walk', rest:'Rest'};
 
-function dateKey(d){ return d.toISOString().slice(0,10); }
+function dateKey(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
 function fmtDate(d){ return d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}); }
 function fmtShort(d){ return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }
 function todayNorm(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
@@ -170,9 +182,22 @@ let selectedDate = todayNorm();
 let currentTab = 'track';
 let formState = null; // {type, subtype} while building a new entry
 
+const SEED_METRICS = {
+  '2026-07-13': {weight:77.8, eaten:2208, burned:2676, sleepScore:90, sleepDuration:8.05},
+  '2026-07-14': {weight:78.7, eaten:2668, burned:2638, sleepScore:73, sleepDuration:5.9},
+  '2026-07-15': {weight:78.0, eaten:2303, burned:2508, sleepScore:86, sleepDuration:7.6},
+  '2026-07-16': {weight:77.5, eaten:2618, burned:2233, sleepScore:78, sleepDuration:6.33},
+  '2026-07-17': {weight:77.5, eaten:3182, burned:3208, sleepScore:77, sleepDuration:6.52},
+};
+
 async function loadData(){
   try{ const a=localStorage.getItem('activities'); if(a) activities=JSON.parse(a); }catch(e){}
   try{ const m=localStorage.getItem('metrics'); if(m) metrics=JSON.parse(m); }catch(e){}
+  let seeded = false;
+  Object.keys(SEED_METRICS).forEach(k=>{
+    if(!metrics[k]){ metrics[k] = Object.assign({}, SEED_METRICS[k]); seeded = true; }
+  });
+  if(seeded) await saveMetrics();
   render();
 }
 async function saveActivities(){ try{ localStorage.setItem('activities', JSON.stringify(activities)); }catch(e){console.error(e);} }
@@ -342,6 +367,20 @@ function renderMetricsFields(){
   document.getElementById('m_sleepscore').value = m.sleepScore ?? '';
   document.getElementById('m_sleepdur').value = m.sleepDuration ?? '';
   document.getElementById('m_weight').value = m.weight ?? '';
+
+  const locked = !!m.locked;
+  ['m_eaten','m_burned','m_steps','m_sleepscore','m_sleepdur','m_weight'].forEach(id=>{
+    document.getElementById(id).disabled = locked;
+  });
+  const lockBtn = document.getElementById('dayLockBtn');
+  lockBtn.textContent = locked ? 'Day marked complete ✓ (tap to unlock)' : 'Mark day complete';
+  lockBtn.className = 'btn' + (locked ? ' locked' : '');
+  lockBtn.onclick = async ()=>{
+    setMetricField(key, 'locked', !locked);
+    await saveMetrics();
+    renderMetricsFields();
+    if(currentTab==='progress') renderProgress();
+  };
 }
 function bindMetricInput(id, field, isFloat){
   document.getElementById(id).addEventListener('change', async (e)=>{
@@ -386,7 +425,10 @@ function drawSeries(svgId, labelsId, days, valueFn, color, opts){
     if(v !== null && v !== undefined && !isNaN(v)) pts.push({i, v});
   });
   const svg = document.getElementById(svgId);
-  if(pts.length===0){ svg.innerHTML = '<text x="350" y="'+(H/2)+'" text-anchor="middle" fill="#8B93A1" font-size="13" font-family="IBM Plex Mono, monospace">No data yet</text>'; document.getElementById(labelsId).innerHTML=''; return null; }
+  if(pts.length===0){
+    if(!opts.dashed){ svg.innerHTML = '<text x="350" y="'+(H/2)+'" text-anchor="middle" fill="#8B93A1" font-size="13" font-family="IBM Plex Mono, monospace">No data yet</text>'; document.getElementById(labelsId).innerHTML=''; }
+    return null;
+  }
   const vals = pts.map(p=>p.v);
   let min = opts.yMin !== undefined ? opts.yMin : Math.min(...vals);
   let max = opts.yMax !== undefined ? opts.yMax : Math.max(...vals);
@@ -395,10 +437,18 @@ function drawSeries(svgId, labelsId, days, valueFn, color, opts){
   const xFor = i => days.length<=1 ? W/2 : (i/(days.length-1))*W;
   const yFor = v => H-pad - ((v-min)/(max-min))*(H-pad*2);
   const polyPts = pts.map(p=>xFor(p.i)+','+yFor(p.v)).join(' ');
-  let svgContent = '<polyline points="'+polyPts+'" fill="none" stroke="'+color+'" stroke-width="2.5"/>';
-  pts.forEach(p=>{ svgContent += '<circle cx="'+xFor(p.i)+'" cy="'+yFor(p.v)+'" r="3" fill="'+color+'"/>'; });
+  let svgContent = '<polyline points="'+polyPts+'" fill="none" stroke="'+color+'" stroke-width="'+(opts.dashed?1.5:2.5)+'"'+(opts.dashed?' stroke-dasharray="6,5"':'')+'/>';
+  if(!opts.noDots){ pts.forEach(p=>{ svgContent += '<circle cx="'+xFor(p.i)+'" cy="'+yFor(p.v)+'" r="3" fill="'+color+'"/>'; }); }
   svg.innerHTML += svgContent;
   return {min,max,pts,xFor,yFor};
+}
+
+const TARGET_START_DATE = new Date(2026,6,13);
+const TARGET_START_WEIGHT = 78.7;
+function targetWeightFor(d){
+  const diffDays = Math.round((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()) - Date.UTC(TARGET_START_DATE.getFullYear(),TARGET_START_DATE.getMonth(),TARGET_START_DATE.getDate()))/86400000);
+  if(diffDays < 0) return null;
+  return +(TARGET_START_WEIGHT - 0.1*diffDays).toFixed(2);
 }
 
 function renderProgress(){
@@ -416,16 +466,23 @@ function renderProgress(){
     ? 'Avg net over logged days: <b>'+(count? Math.round((totalEaten-totalBurned)/count):0)+' kcal/day</b> ('+count+' day'+(count===1?'':'s')+' with both logged)'
     : 'Log both calories eaten and burned to see your average net.';
 
-  // Weight
+  // Weight (+ target line on the same scale)
   document.getElementById('weightChart').innerHTML='';
-  const wRes = drawSeries('weightChart','weightChartLabels', days, d=>{ const m=metrics[dateKey(d)]; return m&&m.weight!=null ? m.weight : null; }, '#E8A23D');
+  const weightVals = days.map(d=>{ const m=metrics[dateKey(d)]; return m&&m.weight!=null ? m.weight : null; }).filter(v=>v!=null);
+  const targetVals = days.map(d=>targetWeightFor(d)).filter(v=>v!=null);
+  const combined = weightVals.concat(targetVals);
+  let sharedMin, sharedMax;
+  if(combined.length){ sharedMin = Math.min(...combined)-0.2; sharedMax = Math.max(...combined)+0.2; }
+  const wRes = drawSeries('weightChart','weightChartLabels', days, d=>{ const m=metrics[dateKey(d)]; return m&&m.weight!=null ? m.weight : null; }, '#E8A23D', {yMin:sharedMin, yMax:sharedMax});
+  drawSeries('weightChart','weightChartLabels', days, targetWeightFor, '#8B93A1', {yMin:sharedMin, yMax:sharedMax, dashed:true, noDots:true});
   const wLabels = document.getElementById('weightChartLabels'); wLabels.innerHTML='';
   [0,9,19,29].forEach(i=>{ const s=document.createElement('span'); s.textContent=fmtShort(days[i]); wLabels.appendChild(s); });
   if(wRes && wRes.pts.length>0){
     const latest = wRes.pts[wRes.pts.length-1].v;
     const first = wRes.pts[0].v;
     const diff = (latest-first).toFixed(1);
-    document.getElementById('weightStat').innerHTML = 'Latest: <b>'+latest+'kg</b> &middot; '+(diff>0?'+':'')+diff+'kg over this period';
+    const target = targetWeightFor(days[days.length-1]);
+    document.getElementById('weightStat').innerHTML = 'Latest: <b>'+latest+'kg</b> &middot; '+(diff>0?'+':'')+diff+'kg over this period'+(target!=null?' &middot; target today: <b>'+target+'kg</b>':'');
   } else {
     document.getElementById('weightStat').textContent = 'No weight logged yet.';
   }
