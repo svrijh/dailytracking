@@ -148,6 +148,12 @@
       <svg viewBox="0 0 700 100" id="sleepDurChart"></svg>
       <div class="chart-labels" id="sleepDurLabels"></div>
     </div>
+
+    <div class="card">
+      <div class="card-title" style="color:var(--red);">Reset</div>
+      <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:12px;">Permanently deletes every logged activity and metric, on every day. Cannot be undone.</div>
+      <button class="btn secondary" id="clearHistoryBtn" style="border-color:var(--red);color:var(--red);">Clear all history</button>
+    </div>
   </div>
 
 </div>
@@ -182,26 +188,21 @@ let selectedDate = todayNorm();
 let currentTab = 'track';
 let formState = null; // {type, subtype} while building a new entry
 
-const SEED_METRICS = {
-  '2026-07-13': {weight:77.8, eaten:2208, burned:2676, sleepScore:90, sleepDuration:8.05},
-  '2026-07-14': {weight:78.7, eaten:2668, burned:2638, sleepScore:73, sleepDuration:5.9},
-  '2026-07-15': {weight:78.0, eaten:2303, burned:2508, sleepScore:86, sleepDuration:7.6},
-  '2026-07-16': {weight:77.5, eaten:2618, burned:2233, sleepScore:78, sleepDuration:6.33},
-  '2026-07-17': {weight:77.5, eaten:3182, burned:3208, sleepScore:77, sleepDuration:6.52},
-};
-
 async function loadData(){
   try{ const a=localStorage.getItem('activities'); if(a) activities=JSON.parse(a); }catch(e){}
   try{ const m=localStorage.getItem('metrics'); if(m) metrics=JSON.parse(m); }catch(e){}
-  let seeded = false;
-  Object.keys(SEED_METRICS).forEach(k=>{
-    if(!metrics[k]){ metrics[k] = Object.assign({}, SEED_METRICS[k]); seeded = true; }
-  });
-  if(seeded) await saveMetrics();
   render();
 }
 async function saveActivities(){ try{ localStorage.setItem('activities', JSON.stringify(activities)); }catch(e){console.error(e);} }
 async function saveMetrics(){ try{ localStorage.setItem('metrics', JSON.stringify(metrics)); }catch(e){console.error(e);} }
+async function clearAllHistory(){
+  activities = {};
+  metrics = {};
+  try{ localStorage.setItem('activities', JSON.stringify(activities)); }catch(e){console.error(e);}
+  try{ localStorage.setItem('metrics', JSON.stringify(metrics)); }catch(e){console.error(e);}
+  selectedDate = todayNorm();
+  render();
+}
 
 function getMetric(dateStr){ return metrics[dateStr] || {}; }
 function setMetricField(dateStr, field, value){
@@ -521,6 +522,19 @@ function renderProgress(){
   const sdLabels = document.getElementById('sleepDurLabels'); sdLabels.innerHTML='';
   [0,9,19,29].forEach(i=>{ const s=document.createElement('span'); s.textContent=fmtShort(days[i]); sdLabels.appendChild(s); });
 }
+
+document.getElementById('clearHistoryBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('clearHistoryBtn');
+  if(btn.dataset.armed === '1'){
+    await clearAllHistory();
+    btn.textContent = 'Clear all history';
+    btn.dataset.armed = '0';
+  } else {
+    btn.textContent = 'Tap again to confirm — this cannot be undone';
+    btn.dataset.armed = '1';
+    setTimeout(()=>{ if(btn.dataset.armed==='1'){ btn.textContent='Clear all history'; btn.dataset.armed='0'; } }, 4000);
+  }
+});
 
 loadData();
 </script>
