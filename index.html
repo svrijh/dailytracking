@@ -55,6 +55,8 @@
   .btn-row .btn{margin-top:0;}
 
   .summary-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+  .activity-item{border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px;background:var(--surface-alt);}
+  .activity-item:last-child{margin-bottom:0;}
   .summary-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;text-transform:uppercase;}
   .summary-sub{font-size:13px;color:var(--text-muted);margin-top:4px;line-height:1.5;}
   .badge{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600;white-space:nowrap;}
@@ -106,6 +108,7 @@
     <div class="tabbtn active" id="tabTrackBtn">Track</div>
     <div class="tabbtn" id="tabProgressBtn">Progress</div>
     <div class="tabbtn" id="tabSummaryBtn">Summary</div>
+    <div class="tabbtn" id="tabSportsBtn">Sports</div>
   </div>
 
   <div id="trackTab">
@@ -212,6 +215,33 @@
     </div>
   </div>
 
+  <div id="sportsTab" style="display:none;">
+    <div class="card chart-card">
+      <div class="card-title">Hours per week, by sport (last 8 weeks)</div>
+      <div class="legend" id="sportsLegend"></div>
+      <svg viewBox="0 0 700 150" id="sportsStackChart"></svg>
+      <div class="chart-labels" id="sportsStackLabels"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="card-title">Cycling — hours per week</div>
+      <div class="stat-mini" id="bikeWkStat"></div>
+      <svg viewBox="0 0 700 130" id="bikeWkChart"></svg>
+      <div class="chart-labels" id="bikeWkLabels"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="card-title">Running — hours per week</div>
+      <div class="stat-mini" id="runWkStat"></div>
+      <svg viewBox="0 0 700 130" id="runWkChart"></svg>
+      <div class="chart-labels" id="runWkLabels"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="card-title">Swimming — hours per week</div>
+      <div class="stat-mini" id="swimWkStat"></div>
+      <svg viewBox="0 0 700 130" id="swimWkChart"></svg>
+      <div class="chart-labels" id="swimWkLabels"></div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -249,6 +279,12 @@ let formState = null;
 async function loadData(){
   try{ const a=localStorage.getItem('activities'); if(a) activities=JSON.parse(a); }catch(e){}
   try{ const m=localStorage.getItem('metrics'); if(m) metrics=JSON.parse(m); }catch(e){}
+  // migrate any old single-object-per-day entries to arrays
+  let migrated = false;
+  Object.keys(activities).forEach(k=>{
+    if(activities[k] && !Array.isArray(activities[k])){ activities[k] = [activities[k]]; migrated = true; }
+  });
+  if(migrated) await saveActivities();
   render();
 }
 async function saveActivities(){ try{ localStorage.setItem('activities', JSON.stringify(activities)); }catch(e){console.error(e);} }
@@ -261,6 +297,9 @@ async function clearAllHistory(){
   render();
 }
 
+const MAX_ACTIVITIES_PER_DAY = 3;
+function getDayActivities(dateStr){ return activities[dateStr] || []; }
+
 function getMetric(dateStr){ return metrics[dateStr] || {}; }
 function setMetricField(dateStr, field, value){
   if(!metrics[dateStr]) metrics[dateStr] = {};
@@ -268,9 +307,9 @@ function setMetricField(dateStr, field, value){
 }
 
 function calorieTarget(dateStr){
-  const a = activities[dateStr];
+  const arr = getDayActivities(dateStr);
   let hours = 0;
-  if(a && a.status==='complete' && a.durationMin) hours = a.durationMin/60;
+  arr.forEach(a=>{ if(a.status==='complete' && a.durationMin) hours += a.durationMin/60; });
   return Math.round(1900 + 150*hours);
 }
 function weightTarget(dateStr){
@@ -284,9 +323,9 @@ function weightTarget(dateStr){
 }
 
 function dayStatus(dateStr){
-  const a = activities[dateStr];
+  const arr = getDayActivities(dateStr);
   const m = metrics[dateStr] || {};
-  const hasActivity = !!a;
+  const hasActivity = arr.length>0;
   const hasEaten = m.eaten!=null;
   const hasSleep = m.sleepScore!=null;
   const hasWeight = m.weight!=null;
@@ -297,6 +336,7 @@ function dayStatus(dateStr){
   return 'orange';
 }
 const STATUS_COLOR = {red:'var(--red)', green:'var(--green)', lightgreen:'var(--lightgreen)', orange:'var(--orange)'};
+const TYPE_COLOR = {bike:'#4C8BC9', run:'#E8A23D', swim:'#4C9A6A', gym:'#9B7FD4', walk:'#B8BFCB', other:'#6B7280'};
 
 // ---------- Tabs ----------
 function showTab(t){
@@ -304,15 +344,19 @@ function showTab(t){
   document.getElementById('tabTrackBtn').classList.toggle('active', t==='track');
   document.getElementById('tabProgressBtn').classList.toggle('active', t==='progress');
   document.getElementById('tabSummaryBtn').classList.toggle('active', t==='summary');
+  document.getElementById('tabSportsBtn').classList.toggle('active', t==='sports');
   document.getElementById('trackTab').style.display = t==='track' ? '' : 'none';
   document.getElementById('progressTab').style.display = t==='progress' ? '' : 'none';
   document.getElementById('summaryTab').style.display = t==='summary' ? '' : 'none';
+  document.getElementById('sportsTab').style.display = t==='sports' ? '' : 'none';
   if(t==='progress') renderProgress();
   if(t==='summary') renderSummary();
+  if(t==='sports') renderSports();
 }
 document.getElementById('tabTrackBtn').addEventListener('click', ()=>showTab('track'));
 document.getElementById('tabProgressBtn').addEventListener('click', ()=>showTab('progress'));
 document.getElementById('tabSummaryBtn').addEventListener('click', ()=>showTab('summary'));
+document.getElementById('tabSportsBtn').addEventListener('click', ()=>showTab('sports'));
 
 // ---------- Day nav ----------
 function renderDayNav(){
@@ -334,83 +378,114 @@ document.getElementById('navDate').addEventListener('change', (e)=>{
 function renderActivityCard(){
   const key = dateKey(selectedDate);
   const card = document.getElementById('activityCard');
-  const existing = activities[key];
+  const arr = getDayActivities(key);
 
-  if(!existing || formState){
-    const draft = formState || (existing ? {type:existing.type} : {type:''});
-    let html = '<div class="card-title">Log activity</div>';
-    html += '<div class="field"><label>Activity type</label><select id="typeSelect">';
-    html += '<option value="">Select...</option>';
-    TYPE_LABELS_ORDER.forEach(t=>{
-      html += '<option value="'+t+'"'+(draft.type===t?' selected':'')+'>'+TYPE_LABELS[t]+'</option>';
-    });
-    html += '</select></div>';
+  let html = '';
 
-    if(draft.type){
-      if(DISTANCE_TYPES.includes(draft.type)){
-        html += '<div class="field-grid">'+
-          '<div class="field"><label>Duration (min)</label><input type="number" class="num-input" id="f_duration" value="'+((existing&&existing.durationMin)||'')+'"></div>'+
-          '<div class="field"><label>Distance (km)</label><input type="number" class="num-input" id="f_distance" step="0.1" value="'+((existing&&existing.distance)||'')+'"></div>'+
-          '</div>';
-      } else {
-        html += '<div class="field" style="margin-top:12px;"><label>Duration (min)</label><input type="number" class="num-input" id="f_duration" value="'+((existing&&existing.durationMin)||'')+'"></div>';
-      }
+  arr.forEach((existing, idx)=>{
+    if(formState && formState.index === idx){
+      html += activityFormHtml(existing, idx);
+    } else {
+      let detailParts = [(existing.durationMin||0)+' min'];
+      if(DISTANCE_TYPES.includes(existing.type)) detailParts.push((existing.distance||0)+' km');
+      html += '<div class="activity-item" data-idx="'+idx+'">'+
+        '<div class="summary-row">'+
+          '<div><div class="summary-name" style="color:'+TYPE_COLOR[existing.type]+';">'+TYPE_LABELS[existing.type]+'</div>'+
+          '<div class="summary-sub">'+detailParts.join(' &middot; ')+'</div></div>'+
+          '<div class="badge '+existing.status+'">'+(existing.status==='complete'?'Complete':'Planned')+'</div>'+
+        '</div>'+
+        '<div class="btn-row">'+
+          '<button class="btn secondary act-edit" data-idx="'+idx+'" style="flex:1;">Edit</button>'+
+          '<button class="btn act-toggle" data-idx="'+idx+'" style="flex:1;">'+(existing.status==='complete'?'Mark as planned':'Mark complete')+'</button>'+
+        '</div>'+
+        '<button class="btn secondary small act-clear" data-idx="'+idx+'" style="margin-top:10px;">Clear entry</button>'+
+      '</div>';
     }
+  });
 
-    html += '<div class="btn-row">';
-    if(existing){ html += '<button class="btn secondary small" id="cancelEditBtn">Cancel</button>'; }
-    html += '<button class="btn" id="saveActivityBtn" style="flex:1;">'+(existing?'Save changes':'Save as planned')+'</button>';
-    html += '</div>';
+  if(formState && formState.index === arr.length && arr.length < MAX_ACTIVITIES_PER_DAY){
+    html += activityFormHtml(null, arr.length);
+  } else if(arr.length < MAX_ACTIVITIES_PER_DAY){
+    html += '<button class="btn secondary add-activity-btn" style="margin-top:'+(arr.length>0?'4px':'0')+';">'+(arr.length===0?'Log activity':'+ Add another activity')+'</button>';
+  }
 
-    card.innerHTML = html;
+  card.innerHTML = '<div class="card-title">Today\'s activities'+(arr.length?' ('+arr.length+'/'+MAX_ACTIVITIES_PER_DAY+')':'')+'</div>' + html;
 
-    const typeSelect = document.getElementById('typeSelect');
-    typeSelect.addEventListener('change', (e)=>{ formState = {type:e.target.value}; renderActivityCard(); });
+  const addBtn = card.querySelector('.add-activity-btn');
+  if(addBtn) addBtn.addEventListener('click', ()=>{ formState = {index: arr.length, type:''}; renderActivityCard(); });
 
+  card.querySelectorAll('.act-edit').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ const i=+btn.dataset.idx; formState = {index:i, type:arr[i].type}; renderActivityCard(); });
+  });
+  card.querySelectorAll('.act-toggle').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const i=+btn.dataset.idx;
+      arr[i].status = arr[i].status==='complete' ? 'planned' : 'complete';
+      await saveActivities(); renderActivityCard(); updateStreak();
+      if(currentTab==='progress') renderProgress();
+    });
+  });
+  card.querySelectorAll('.act-clear').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const i=+btn.dataset.idx;
+      arr.splice(i,1);
+      if(arr.length===0) delete activities[key]; else activities[key]=arr;
+      await saveActivities(); formState=null; render();
+    });
+  });
+
+  const typeSelect = document.getElementById('typeSelect');
+  if(typeSelect){
+    typeSelect.addEventListener('change', (e)=>{ formState = {index: formState.index, type:e.target.value}; renderActivityCard(); });
     const cancelBtn = document.getElementById('cancelEditBtn');
     if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ formState=null; renderActivityCard(); });
-
     document.getElementById('saveActivityBtn').addEventListener('click', async ()=>{
       const type = typeSelect.value;
       if(!type) return;
-      const entry = {type, status: (existing&&existing.status) || 'planned'};
+      const idx = formState.index;
+      const prevStatus = (arr[idx] && arr[idx].status) || 'planned';
+      const entry = {type, status: prevStatus};
       const durEl = document.getElementById('f_duration');
       entry.durationMin = durEl ? (parseFloat(durEl.value)||0) : 0;
       if(DISTANCE_TYPES.includes(type)){
         const distEl = document.getElementById('f_distance');
         entry.distance = distEl ? (parseFloat(distEl.value)||0) : 0;
       }
-      activities[key] = entry;
+      arr[idx] = entry;
+      activities[key] = arr;
       formState = null;
       await saveActivities();
       render();
     });
-    return;
+  }
+}
+
+function activityFormHtml(existing, idx){
+  const draft = formState;
+  let html = '<div class="activity-item">';
+  html += '<div class="field"><label>Activity type'+(idx>0?' #'+(idx+1):'')+'</label><select id="typeSelect">';
+  html += '<option value="">Select...</option>';
+  TYPE_LABELS_ORDER.forEach(t=>{
+    html += '<option value="'+t+'"'+(draft.type===t?' selected':'')+'>'+TYPE_LABELS[t]+'</option>';
+  });
+  html += '</select></div>';
+
+  if(draft.type){
+    if(DISTANCE_TYPES.includes(draft.type)){
+      html += '<div class="field-grid">'+
+        '<div class="field"><label>Duration (min)</label><input type="number" class="num-input" id="f_duration" value="'+((existing&&existing.durationMin)||'')+'"></div>'+
+        '<div class="field"><label>Distance (km)</label><input type="number" class="num-input" id="f_distance" step="0.1" value="'+((existing&&existing.distance)||'')+'"></div>'+
+        '</div>';
+    } else {
+      html += '<div class="field" style="margin-top:12px;"><label>Duration (min)</label><input type="number" class="num-input" id="f_duration" value="'+((existing&&existing.durationMin)||'')+'"></div>';
+    }
   }
 
-  let detailParts = [(existing.durationMin||0)+' min'];
-  if(DISTANCE_TYPES.includes(existing.type)) detailParts.push((existing.distance||0)+' km');
-
-  card.innerHTML =
-    '<div class="summary-row">'+
-      '<div><div class="summary-name">'+TYPE_LABELS[existing.type]+'</div>'+
-      '<div class="summary-sub">'+detailParts.join(' &middot; ')+'</div></div>'+
-      '<div class="badge '+existing.status+'">'+(existing.status==='complete'?'Complete':'Planned')+'</div>'+
-    '</div>'+
-    '<div class="btn-row">'+
-      '<button class="btn secondary" id="editActivityBtn" style="flex:1;">Edit</button>'+
-      '<button class="btn" id="toggleCompleteBtn" style="flex:1;">'+(existing.status==='complete'?'Mark as planned':'Mark complete')+'</button>'+
-    '</div>'+
-    '<button class="btn secondary small" id="clearActivityBtn" style="margin-top:10px;">Clear entry</button>';
-
-  document.getElementById('editActivityBtn').addEventListener('click', ()=>{ formState = {type:existing.type}; renderActivityCard(); });
-  document.getElementById('toggleCompleteBtn').addEventListener('click', async ()=>{
-    existing.status = existing.status==='complete' ? 'planned' : 'complete';
-    await saveActivities(); renderActivityCard(); updateStreak();
-  });
-  document.getElementById('clearActivityBtn').addEventListener('click', async ()=>{
-    delete activities[key]; await saveActivities(); render();
-  });
+  html += '<div class="btn-row">';
+  html += '<button class="btn secondary small" id="cancelEditBtn">Cancel</button>';
+  html += '<button class="btn" id="saveActivityBtn" style="flex:1;">'+(existing?'Save changes':'Save as planned')+'</button>';
+  html += '</div></div>';
+  return html;
 }
 
 // ---------- Metrics fields ----------
@@ -578,7 +653,10 @@ function renderProgress(){
   }
 
   // Hours active
-  const hourVals = days.map(d=>{ const a=activities[dateKey(d)]; return (a&&a.status==='complete'&&a.durationMin) ? a.durationMin/60 : 0; });
+  const hourVals = days.map(d=>{
+    const arr = getDayActivities(dateKey(d));
+    return arr.reduce((sum,a)=> sum + ((a.status==='complete'&&a.durationMin) ? a.durationMin/60 : 0), 0);
+  });
   drawBars('hoursChart', days, (d,i)=>hourVals[days.indexOf(d)], '#4C9A6A');
   chartLabels('hoursChartLabels', days);
   const totalHours = hourVals.reduce((a,b)=>a+b,0);
@@ -606,7 +684,11 @@ function renderSummary(){
   document.getElementById('sumCalSub').textContent = loggedCal+' of 7 days logged';
 
   let totalHours=0, totalDist=0;
-  days.forEach(d=>{ const a=activities[dateKey(d)]; if(a&&a.status==='complete'){ if(a.durationMin) totalHours+=a.durationMin/60; if(a.distance) totalDist+=a.distance; } });
+  days.forEach(d=>{
+    getDayActivities(dateKey(d)).forEach(a=>{
+      if(a.status==='complete'){ if(a.durationMin) totalHours+=a.durationMin/60; if(a.distance) totalDist+=a.distance; }
+    });
+  });
   document.getElementById('sumHours').textContent = totalHours.toFixed(1)+' h';
   document.getElementById('sumDist').textContent = totalDist.toFixed(1)+' km';
 
@@ -615,6 +697,98 @@ function renderSummary(){
 }
 document.getElementById('wkPrev').addEventListener('click', ()=>{ weekStart.setDate(weekStart.getDate()-7); weekStart=new Date(weekStart); renderSummary(); });
 document.getElementById('wkNext').addEventListener('click', ()=>{ weekStart.setDate(weekStart.getDate()+7); weekStart=new Date(weekStart); renderSummary(); });
+
+// ---------- Sports tab ----------
+const SPORTS_WEEKS = 8;
+function last8WeekStarts(){
+  const arr = [];
+  const thisWeek = startOfWeek(todayNorm());
+  for(let i=SPORTS_WEEKS-1;i>=0;i--){
+    const ws = new Date(thisWeek);
+    ws.setDate(ws.getDate()-7*i);
+    arr.push(ws);
+  }
+  return arr;
+}
+function weekHoursByType(ws){
+  const days = computeWeekDates(ws);
+  const totals = {bike:0, run:0, swim:0, gym:0, walk:0, other:0};
+  days.forEach(d=>{
+    getDayActivities(dateKey(d)).forEach(a=>{
+      if(a.status==='complete' && a.durationMin){ totals[a.type] += a.durationMin/60; }
+    });
+  });
+  return totals;
+}
+function weekLabel(ws){ return fmtShort(ws); }
+
+function drawWeeklyBars(svgId, weekStarts, valueFn, color){
+  const W=700,H=130,pad=14;
+  const n = weekStarts.length, gap=W/n, barW=gap*0.55;
+  const vals = weekStarts.map(valueFn);
+  const max = Math.max(...vals, 0.5);
+  const yFor = v => H-pad - (v/max)*(H-pad*2);
+  let content = '';
+  vals.forEach((v,i)=>{
+    const x = i*gap+(gap-barW)/2;
+    const y = yFor(v);
+    const isCurrent = i===n-1;
+    content += '<rect x="'+x+'" y="'+y+'" width="'+barW+'" height="'+(H-pad-y)+'" rx="2" fill="'+color+'" opacity="'+(isCurrent?1:0.75)+'"/>';
+    if(v>0) content += '<text x="'+(x+barW/2)+'" y="'+(y-5)+'" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#8B93A1">'+v.toFixed(1)+'</text>';
+  });
+  document.getElementById(svgId).innerHTML = content;
+  const labelsId = svgId.replace('Chart','Labels');
+  const labelsEl = document.getElementById(labelsId);
+  if(labelsEl){
+    labelsEl.innerHTML = '';
+    weekStarts.forEach(ws=>{ const s=document.createElement('span'); s.textContent=weekLabel(ws); labelsEl.appendChild(s); });
+  }
+  return vals;
+}
+
+function renderSports(){
+  const weekStarts = last8WeekStarts();
+  const weeklyTotals = weekStarts.map(weekHoursByType);
+
+  // Stacked overview
+  const W=700,H=150,pad=14;
+  const n = weekStarts.length, gap=W/n, barW=gap*0.55;
+  const sums = weeklyTotals.map(t=> TYPE_LABELS_ORDER.reduce((s,k)=>s+t[k],0));
+  const max = Math.max(...sums, 1);
+  let content = '';
+  weeklyTotals.forEach((t,i)=>{
+    let yCursor = H-pad;
+    const x = i*gap+(gap-barW)/2;
+    TYPE_LABELS_ORDER.forEach(type=>{
+      const v = t[type];
+      if(v<=0) return;
+      const h = (v/max)*(H-pad*2);
+      yCursor -= h;
+      content += '<rect x="'+x+'" y="'+yCursor+'" width="'+barW+'" height="'+h+'" fill="'+TYPE_COLOR[type]+'"/>';
+    });
+  });
+  document.getElementById('sportsStackChart').innerHTML = content;
+  const stackLabels = document.getElementById('sportsStackLabels');
+  stackLabels.innerHTML = '';
+  weekStarts.forEach(ws=>{ const s=document.createElement('span'); s.textContent=weekLabel(ws); stackLabels.appendChild(s); });
+
+  const legend = document.getElementById('sportsLegend');
+  legend.innerHTML = '';
+  TYPE_LABELS_ORDER.forEach(type=>{
+    const span = document.createElement('span');
+    span.innerHTML = '<i style="background:'+TYPE_COLOR[type]+';"></i>'+TYPE_LABELS[type];
+    legend.appendChild(span);
+  });
+
+  // Individual sport charts
+  const bikeVals = drawWeeklyBars('bikeWkChart', weekStarts, (ws,i)=>weekHoursByType(ws).bike, TYPE_COLOR.bike);
+  const runVals = drawWeeklyBars('runWkChart', weekStarts, (ws,i)=>weekHoursByType(ws).run, TYPE_COLOR.run);
+  const swimVals = drawWeeklyBars('swimWkChart', weekStarts, (ws,i)=>weekHoursByType(ws).swim, TYPE_COLOR.swim);
+
+  document.getElementById('bikeWkStat').innerHTML = '<b>'+bikeVals[bikeVals.length-1].toFixed(1)+'h</b> this week &middot; avg <b>'+(bikeVals.reduce((a,b)=>a+b,0)/bikeVals.length).toFixed(1)+'h</b>/wk over '+SPORTS_WEEKS+' weeks';
+  document.getElementById('runWkStat').innerHTML = '<b>'+runVals[runVals.length-1].toFixed(1)+'h</b> this week &middot; avg <b>'+(runVals.reduce((a,b)=>a+b,0)/runVals.length).toFixed(1)+'h</b>/wk over '+SPORTS_WEEKS+' weeks';
+  document.getElementById('swimWkStat').innerHTML = '<b>'+swimVals[swimVals.length-1].toFixed(1)+'h</b> this week &middot; avg <b>'+(swimVals.reduce((a,b)=>a+b,0)/swimVals.length).toFixed(1)+'h</b>/wk over '+SPORTS_WEEKS+' weeks';
+}
 
 // ---------- Reset ----------
 document.getElementById('clearHistoryBtn').addEventListener('click', async ()=>{
