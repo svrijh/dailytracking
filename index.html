@@ -310,7 +310,7 @@ function calorieTarget(dateStr){
   const arr = getDayActivities(dateStr);
   let hours = 0;
   arr.forEach(a=>{ if(a.status==='complete' && a.durationMin) hours += a.durationMin/60; });
-  return Math.round(1900 + 150*hours);
+  return Math.round(1750 + 250*hours);
 }
 function weightTarget(dateStr){
   const entries = Object.keys(metrics).filter(k=>metrics[k] && metrics[k].weight!=null).sort();
